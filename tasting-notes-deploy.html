@@ -1,0 +1,688 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>나만의 시음 기록 노트</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #2a2622;
+    --paper: #f0eae0;
+    --paper-line: #ddd4c4;
+    --ink: #35312b;
+    --sub: #8f8577;
+
+    --wine: #7d5259;
+    --wine-soft: #e9e0df;
+    --whiskey: #96773f;
+    --whiskey-soft: #e9e2d2;
+
+    --bar: #8a6a45;
+    --bar-soft: #e6ddcd;
+    --restaurant: #6e6552;
+    --restaurant-soft: #e2ddd0;
+    --pub: #5c6773;
+    --pub-soft: #dde1e5;
+
+    --gold: #b6a06a;
+  }
+
+  * { box-sizing: border-box; }
+
+  body{
+    margin:0;
+    min-height:100vh;
+    background:
+      radial-gradient(circle at 15% 10%, #322d27 0%, transparent 40%),
+      radial-gradient(circle at 90% 90%, #2e2a25 0%, transparent 45%),
+      var(--bg);
+    font-family:'Noto Sans KR', sans-serif;
+    color:var(--ink);
+    padding: 28px 16px 60px;
+  }
+
+  .wrap{ max-width:480px; margin:0 auto; }
+
+  header{
+    text-align:center;
+    margin-bottom:18px;
+  }
+  header h1{
+    font-family:'Gowun Batang', serif;
+    font-size:26px;
+    color:#f3e6d2;
+    margin:0 0 4px;
+    letter-spacing:0.5px;
+  }
+  header p{
+    font-size:12px;
+    color:#a99a86;
+    margin:0;
+  }
+
+  /* ===== 홈 메인 탭 (장소 / 주류) ===== */
+  .home-tabs{
+    display:flex;
+    gap:8px;
+    margin-bottom:20px;
+  }
+  .home-tab-btn{
+    flex:1;
+    padding:12px 4px;
+    border-radius:10px;
+    border:none;
+    background:#3a352e;
+    color:#a99a86;
+    font-family:'Gowun Batang', serif;
+    font-weight:700;
+    font-size:16px;
+    cursor:pointer;
+  }
+  .home-tab-btn.active{
+    background:#e6ded0;
+    color:#35312b;
+  }
+
+  .section{ display:none; }
+  .section.active{ display:block; }
+
+  /* ===== 입력 폼 카드 ===== */
+  .form-card{
+    background:var(--paper);
+    border-radius:14px;
+    padding:18px 18px 16px;
+    box-shadow: 0 10px 24px rgba(0,0,0,0.35);
+    margin-bottom:22px;
+  }
+  .form-title{
+    font-family:'Gowun Batang', serif;
+    font-size:17px;
+    margin:0 0 12px;
+    color:var(--ink);
+  }
+
+  .field{ margin-bottom:12px; }
+  .field label{
+    display:block;
+    font-size:11px;
+    font-weight:700;
+    color:var(--sub);
+    margin-bottom:4px;
+  }
+  .field input[type="text"],
+  .field input[type="date"],
+  .field textarea{
+    width:100%;
+    padding:9px 10px;
+    border:1px solid var(--paper-line);
+    border-radius:8px;
+    background:#fffdf8;
+    font-family:'Noto Sans KR', sans-serif;
+    font-size:13px;
+    color:var(--ink);
+  }
+  .field textarea{ resize:vertical; min-height:44px; }
+
+  .row2{ display:flex; gap:10px; }
+  .row2 > div{ flex:1; }
+
+  .category-picker{ display:flex; gap:6px; }
+  .cat-btn{
+    flex:1;
+    padding:8px 4px;
+    border-radius:8px;
+    border:1.5px solid var(--paper-line);
+    background:#fffdf8;
+    font-size:12px;
+    font-weight:700;
+    cursor:pointer;
+    color:var(--sub);
+  }
+  .cat-btn.active[data-cat="위스키"]{ background:var(--whiskey-soft); border-color:var(--whiskey); color:var(--whiskey); }
+  .cat-btn.active[data-cat="와인"]{ background:var(--wine-soft); border-color:var(--wine); color:var(--wine); }
+  .cat-btn.active[data-cat="위스키바"]{ background:var(--bar-soft); border-color:var(--bar); color:var(--bar); }
+  .cat-btn.active[data-cat="식당"]{ background:var(--restaurant-soft); border-color:var(--restaurant); color:var(--restaurant); }
+  .cat-btn.active[data-cat="술집"]{ background:var(--pub-soft); border-color:var(--pub); color:var(--pub); }
+
+  .stars{ display:flex; gap:4px; font-size:22px; line-height:1; }
+  .stars span{ cursor:pointer; color:#d9cdb8; }
+  .stars span.filled{ color:var(--gold); }
+
+  .save-btn{
+    width:100%;
+    margin-top:6px;
+    padding:12px;
+    border:none;
+    border-radius:9px;
+    background:var(--ink);
+    color:#f7efe2;
+    font-weight:700;
+    font-size:14px;
+    cursor:pointer;
+  }
+  .save-btn:active{ transform: translateY(1px); }
+
+  /* ===== 필터 탭 ===== */
+  .filters{
+    display:flex;
+    gap:6px;
+    margin-bottom:14px;
+    overflow-x:auto;
+  }
+  .filter-btn{
+    flex:0 0 auto;
+    padding:6px 14px;
+    border-radius:999px;
+    border:1px solid #4a453e;
+    background:transparent;
+    color:#b8ac9c;
+    font-size:12px;
+    font-weight:700;
+    cursor:pointer;
+  }
+  .filter-btn.active{
+    background:#e6ded0;
+    color:#35312b;
+    border-color:#e6ded0;
+  }
+
+  /* ===== 기록 리스트 ===== */
+  .empty{
+    text-align:center;
+    color:#8a7a68;
+    font-size:13px;
+    padding:30px 10px;
+    border:1px dashed #4a453e;
+    border-radius:12px;
+  }
+
+  .entry{
+    background:var(--paper);
+    border-radius:12px;
+    padding:14px 16px;
+    margin-bottom:10px;
+    box-shadow: 0 6px 14px rgba(0,0,0,0.25);
+    position:relative;
+  }
+  .entry-top{
+    display:flex;
+    justify-content:space-between;
+    align-items:flex-start;
+    gap:8px;
+  }
+  .badge{
+    display:inline-block;
+    font-size:10px;
+    font-weight:700;
+    padding:2px 8px;
+    border-radius:999px;
+    margin-bottom:6px;
+  }
+  .badge.위스키{ background:var(--whiskey-soft); color:var(--whiskey); }
+  .badge.와인{ background:var(--wine-soft); color:var(--wine); }
+  .badge.위스키바{ background:var(--bar-soft); color:var(--bar); }
+  .badge.식당{ background:var(--restaurant-soft); color:var(--restaurant); }
+  .badge.술집{ background:var(--pub-soft); color:var(--pub); }
+
+  .entry-name{
+    font-family:'Gowun Batang', serif;
+    font-size:17px;
+    margin:0 0 2px;
+  }
+  .entry-sub{
+    font-size:12px;
+    color:var(--sub);
+    margin:0 0 6px;
+  }
+  .entry-date{
+    font-size:11px;
+    color:var(--sub);
+    white-space:nowrap;
+  }
+  .entry-rating{
+    font-size:13px;
+    color:var(--gold);
+    margin-bottom:8px;
+  }
+  .entry-notes{
+    font-size:12px;
+    line-height:1.5;
+    color:var(--ink);
+  }
+  .entry-notes b{
+    color:var(--sub);
+    font-weight:700;
+    margin-right:4px;
+  }
+  .del-btn{
+    position:absolute;
+    top:12px;
+    right:14px;
+    border:none;
+    background:none;
+    color:#c9b8a0;
+    font-size:16px;
+    cursor:pointer;
+    line-height:1;
+  }
+
+  .loading{
+    text-align:center;
+    color:#a99a86;
+    font-size:13px;
+    padding:20px;
+  }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <h1>🥃 나만의 시음 기록 노트</h1>
+    <p>다녀온 장소와 마신 술, 따로따로 기록해요</p>
+  </header>
+
+  <div class="home-tabs" id="homeTabs">
+    <button class="home-tab-btn active" data-section="place">📍 장소</button>
+    <button class="home-tab-btn" data-section="drink">🥃 주류</button>
+  </div>
+
+  <!-- ===== 장소 탭 ===== -->
+  <div class="section active" id="placeSection">
+    <div class="form-card">
+      <p class="form-title">📍 다녀온 장소 기록</p>
+
+      <div class="field">
+        <label>카테고리</label>
+        <div class="category-picker" id="placeCatPicker">
+          <button type="button" class="cat-btn" data-cat="위스키바">위스키바</button>
+          <button type="button" class="cat-btn" data-cat="식당">식당</button>
+          <button type="button" class="cat-btn" data-cat="술집">술집</button>
+        </div>
+      </div>
+
+      <div class="row2">
+        <div class="field">
+          <label>상호명</label>
+          <input type="text" id="placeName" placeholder="예: 위스키라이브러리">
+        </div>
+        <div class="field">
+          <label>날짜</label>
+          <input type="date" id="placeDate">
+        </div>
+      </div>
+
+      <div class="field">
+        <label>별점</label>
+        <div class="stars" id="placeStarPicker">
+          <span data-v="1">★</span><span data-v="2">★</span><span data-v="3">★</span><span data-v="4">★</span><span data-v="5">★</span>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>메모</label>
+        <textarea id="placeMemo" placeholder="예: 분위기 좋고 위스키 종류 많음, 안주는 치즈플래터 추천"></textarea>
+      </div>
+
+      <button class="save-btn" id="placeSaveBtn">저장하기</button>
+    </div>
+
+    <div class="filters" id="placeFilters">
+      <button class="filter-btn active" data-cat="전체">전체</button>
+      <button class="filter-btn" data-cat="위스키바">위스키바</button>
+      <button class="filter-btn" data-cat="식당">식당</button>
+      <button class="filter-btn" data-cat="술집">술집</button>
+    </div>
+
+    <div id="placeListArea"><div class="loading">불러오는 중...</div></div>
+  </div>
+
+  <!-- ===== 주류 탭 ===== -->
+  <div class="section" id="drinkSection">
+    <div class="form-card">
+      <p class="form-title">🥃 마신 술 기록</p>
+
+      <div class="field">
+        <label>카테고리</label>
+        <div class="category-picker" id="drinkCatPicker">
+          <button type="button" class="cat-btn" data-cat="위스키">위스키</button>
+          <button type="button" class="cat-btn" data-cat="와인">와인</button>
+        </div>
+      </div>
+
+      <div class="row2">
+        <div class="field">
+          <label>이름</label>
+          <input type="text" id="drinkName" placeholder="예: 라프로익 10년">
+        </div>
+        <div class="field">
+          <label>브랜드</label>
+          <input type="text" id="drinkBrand" placeholder="예: Laphroaig">
+        </div>
+      </div>
+
+      <div class="row2">
+        <div class="field">
+          <label>날짜</label>
+          <input type="date" id="drinkDate">
+        </div>
+        <div class="field">
+          <label>별점</label>
+          <div class="stars" id="drinkStarPicker">
+            <span data-v="1">★</span><span data-v="2">★</span><span data-v="3">★</span><span data-v="4">★</span><span data-v="5">★</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>향 (아로마)</label>
+        <textarea id="drinkAroma" placeholder="예: 스모키하고 요오드 향, 은은한 바닐라"></textarea>
+      </div>
+
+      <div class="field">
+        <label>맛</label>
+        <textarea id="drinkTaste" placeholder="예: 짠맛과 스모크, 끝에 단맛이 살짝"></textarea>
+      </div>
+
+      <button class="save-btn" id="drinkSaveBtn">저장하기</button>
+    </div>
+
+    <div class="filters" id="drinkFilters">
+      <button class="filter-btn active" data-cat="전체">전체</button>
+      <button class="filter-btn" data-cat="위스키">위스키</button>
+      <button class="filter-btn" data-cat="와인">와인</button>
+    </div>
+
+    <div id="drinkListArea"><div class="loading">불러오는 중...</div></div>
+  </div>
+
+</div>
+
+<script>
+  // =====================================================
+  // 이 앱은 "장소" 기록과 "주류" 기록을 완전히 분리해서 관리합니다.
+  // 각각 저장 위치(STORAGE KEY)도 다르고, 폼도 다르고, 목록도 다릅니다.
+  // =====================================================
+
+  const PLACE_KEY = "tasting_places";
+  const DRINK_KEY = "tasting_drinks";
+
+  let placeEntries = [];
+  let drinkEntries = [];
+
+  let selectedPlaceCat = "위스키바";
+  let selectedDrinkCat = "위스키";
+  let placeRating = 0;
+  let drinkRating = 0;
+  let placeFilter = "전체";
+  let drinkFilter = "전체";
+
+  // ===== 홈 탭 전환 (장소 <-> 주류) =====
+  const homeTabsEl = document.getElementById("homeTabs");
+  const placeSection = document.getElementById("placeSection");
+  const drinkSection = document.getElementById("drinkSection");
+
+  homeTabsEl.addEventListener("click", function (e) {
+    const btn = e.target.closest(".home-tab-btn");
+    if (!btn) return;
+    const target = btn.dataset.section;
+
+    [...homeTabsEl.children].forEach(b => b.classList.toggle("active", b === btn));
+    placeSection.classList.toggle("active", target === "place");
+    drinkSection.classList.toggle("active", target === "drink");
+  });
+
+  // ===== 공통: 카테고리 선택 버튼 헬퍼 =====
+  function setupCatPicker(pickerEl, defaultCat, onSelect) {
+    pickerEl.addEventListener("click", function (e) {
+      const btn = e.target.closest(".cat-btn");
+      if (!btn) return;
+      onSelect(btn.dataset.cat);
+      [...pickerEl.children].forEach(b => b.classList.toggle("active", b === btn));
+    });
+    pickerEl.querySelector(`[data-cat="${defaultCat}"]`).classList.add("active");
+  }
+
+  // ===== 공통: 별점 선택 헬퍼 =====
+  function setupStarPicker(starEl, getValue, setValue) {
+    starEl.addEventListener("click", function (e) {
+      const star = e.target.closest("span");
+      if (!star) return;
+      setValue(Number(star.dataset.v));
+      renderStars(starEl, getValue());
+    });
+  }
+  function renderStars(starEl, value) {
+    [...starEl.children].forEach(s => {
+      s.classList.toggle("filled", Number(s.dataset.v) <= value);
+    });
+  }
+
+  function escapeHTML(str) {
+    const div = document.createElement("div");
+    div.textContent = str || "";
+    return div.innerHTML;
+  }
+
+  // =====================================================
+  // 📍 장소 탭 로직
+  // =====================================================
+  const placeCatPicker = document.getElementById("placeCatPicker");
+  const placeStarPicker = document.getElementById("placeStarPicker");
+  const placeFiltersEl = document.getElementById("placeFilters");
+  const placeListArea = document.getElementById("placeListArea");
+  const placeSaveBtn = document.getElementById("placeSaveBtn");
+  const placeName = document.getElementById("placeName");
+  const placeDate = document.getElementById("placeDate");
+  const placeMemo = document.getElementById("placeMemo");
+
+  placeDate.value = new Date().toISOString().slice(0, 10);
+
+  setupCatPicker(placeCatPicker, "위스키바", (cat) => selectedPlaceCat = cat);
+  setupStarPicker(placeStarPicker, () => placeRating, (v) => placeRating = v);
+
+  placeFiltersEl.addEventListener("click", function (e) {
+    const btn = e.target.closest(".filter-btn");
+    if (!btn) return;
+    placeFilter = btn.dataset.cat;
+    [...placeFiltersEl.children].forEach(b => b.classList.toggle("active", b === btn));
+    renderPlaceList();
+  });
+
+  async function loadPlaceEntries() {
+    try {
+      const raw = localStorage.getItem(PLACE_KEY);
+      placeEntries = raw ? JSON.parse(raw) : [];
+    } catch (err) {
+      placeEntries = [];
+    }
+    renderPlaceList();
+  }
+  async function persistPlaces() {
+    try {
+      localStorage.setItem(PLACE_KEY, JSON.stringify(placeEntries));
+    } catch (err) {
+      console.error("장소 저장 오류:", err);
+    }
+  }
+
+  placeSaveBtn.addEventListener("click", async function () {
+    const name = placeName.value.trim();
+    if (!name) { placeName.focus(); return; }
+
+    placeEntries.unshift({
+      id: Date.now(),
+      category: selectedPlaceCat,
+      name: name,
+      date: placeDate.value || new Date().toISOString().slice(0, 10),
+      rating: placeRating,
+      memo: placeMemo.value.trim(),
+    });
+    await persistPlaces();
+
+    placeName.value = "";
+    placeMemo.value = "";
+    placeRating = 0;
+    renderStars(placeStarPicker, 0);
+    renderPlaceList();
+  });
+
+  async function deletePlaceEntry(id) {
+    placeEntries = placeEntries.filter(e => e.id !== id);
+    await persistPlaces();
+    renderPlaceList();
+  }
+
+  function renderPlaceList() {
+    const filtered = placeFilter === "전체"
+      ? placeEntries
+      : placeEntries.filter(e => e.category === placeFilter);
+
+    if (filtered.length === 0) {
+      placeListArea.innerHTML = '<div class="empty">아직 기록한 장소가 없어요 📍</div>';
+      return;
+    }
+
+    placeListArea.innerHTML = filtered.map(e => {
+      const stars = "★".repeat(e.rating) + "☆".repeat(5 - e.rating);
+      return `
+        <div class="entry">
+          <button class="del-btn" data-id="${e.id}">✕</button>
+          <span class="badge ${e.category}">${e.category}</span>
+          <div class="entry-top">
+            <p class="entry-name">${escapeHTML(e.name)}</p>
+            <span class="entry-date">${e.date}</span>
+          </div>
+          <div class="entry-rating">${stars}</div>
+          <div class="entry-notes">${escapeHTML(e.memo)}</div>
+        </div>
+      `;
+    }).join("");
+
+    placeListArea.querySelectorAll(".del-btn").forEach(btn => {
+      btn.addEventListener("click", () => deletePlaceEntry(Number(btn.dataset.id)));
+    });
+  }
+
+  // =====================================================
+  // 🥃 주류 탭 로직
+  // =====================================================
+  const drinkCatPicker = document.getElementById("drinkCatPicker");
+  const drinkStarPicker = document.getElementById("drinkStarPicker");
+  const drinkFiltersEl = document.getElementById("drinkFilters");
+  const drinkListArea = document.getElementById("drinkListArea");
+  const drinkSaveBtn = document.getElementById("drinkSaveBtn");
+  const drinkName = document.getElementById("drinkName");
+  const drinkBrand = document.getElementById("drinkBrand");
+  const drinkDate = document.getElementById("drinkDate");
+  const drinkAroma = document.getElementById("drinkAroma");
+  const drinkTaste = document.getElementById("drinkTaste");
+
+  drinkDate.value = new Date().toISOString().slice(0, 10);
+
+  setupCatPicker(drinkCatPicker, "위스키", (cat) => selectedDrinkCat = cat);
+  setupStarPicker(drinkStarPicker, () => drinkRating, (v) => drinkRating = v);
+
+  drinkFiltersEl.addEventListener("click", function (e) {
+    const btn = e.target.closest(".filter-btn");
+    if (!btn) return;
+    drinkFilter = btn.dataset.cat;
+    [...drinkFiltersEl.children].forEach(b => b.classList.toggle("active", b === btn));
+    renderDrinkList();
+  });
+
+  async function loadDrinkEntries() {
+    try {
+      const raw = localStorage.getItem(DRINK_KEY);
+      drinkEntries = raw ? JSON.parse(raw) : [];
+    } catch (err) {
+      drinkEntries = [];
+    }
+    renderDrinkList();
+  }
+  async function persistDrinks() {
+    try {
+      localStorage.setItem(DRINK_KEY, JSON.stringify(drinkEntries));
+    } catch (err) {
+      console.error("주류 저장 오류:", err);
+    }
+  }
+
+  drinkSaveBtn.addEventListener("click", async function () {
+    const name = drinkName.value.trim();
+    if (!name) { drinkName.focus(); return; }
+
+    drinkEntries.unshift({
+      id: Date.now(),
+      category: selectedDrinkCat,
+      name: name,
+      brand: drinkBrand.value.trim(),
+      date: drinkDate.value || new Date().toISOString().slice(0, 10),
+      rating: drinkRating,
+      aroma: drinkAroma.value.trim(),
+      taste: drinkTaste.value.trim(),
+    });
+    await persistDrinks();
+
+    drinkName.value = "";
+    drinkBrand.value = "";
+    drinkAroma.value = "";
+    drinkTaste.value = "";
+    drinkRating = 0;
+    renderStars(drinkStarPicker, 0);
+    renderDrinkList();
+  });
+
+  async function deleteDrinkEntry(id) {
+    drinkEntries = drinkEntries.filter(e => e.id !== id);
+    await persistDrinks();
+    renderDrinkList();
+  }
+
+  function renderDrinkList() {
+    const filtered = drinkFilter === "전체"
+      ? drinkEntries
+      : drinkEntries.filter(e => e.category === drinkFilter);
+
+    if (filtered.length === 0) {
+      drinkListArea.innerHTML = '<div class="empty">아직 기록한 술이 없어요 🥃</div>';
+      return;
+    }
+
+    drinkListArea.innerHTML = filtered.map(e => {
+      const stars = "★".repeat(e.rating) + "☆".repeat(5 - e.rating);
+      const notes = [
+        e.aroma ? `<div><b>향</b>${escapeHTML(e.aroma)}</div>` : "",
+        e.taste ? `<div><b>맛</b>${escapeHTML(e.taste)}</div>` : "",
+      ].join("");
+      return `
+        <div class="entry">
+          <button class="del-btn" data-id="${e.id}">✕</button>
+          <span class="badge ${e.category}">${e.category}</span>
+          <div class="entry-top">
+            <div>
+              <p class="entry-name">${escapeHTML(e.name)}</p>
+              <p class="entry-sub">${escapeHTML(e.brand)}</p>
+            </div>
+            <span class="entry-date">${e.date}</span>
+          </div>
+          <div class="entry-rating">${stars}</div>
+          <div class="entry-notes">${notes}</div>
+        </div>
+      `;
+    }).join("");
+
+    drinkListArea.querySelectorAll(".del-btn").forEach(btn => {
+      btn.addEventListener("click", () => deleteDrinkEntry(Number(btn.dataset.id)));
+    });
+  }
+
+  // ===== 시작 =====
+  loadPlaceEntries();
+  loadDrinkEntries();
+</script>
+
+</body>
+</html>
