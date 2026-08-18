@@ -115,6 +115,8 @@
   .field input[type="date"],
   .field textarea{
     width:100%;
+    max-width:100%;
+    min-width:0;
     padding:9px 10px;
     border:1px solid var(--paper-line);
     border-radius:8px;
@@ -124,9 +126,40 @@
     color:var(--ink);
   }
   .field textarea{ resize:vertical; min-height:44px; }
+  .field input[type="file"]{
+    width:100%;
+    font-size:11px;
+    color:var(--sub);
+  }
+  .photo-preview{
+    margin-top:8px;
+    max-width:120px;
+    border-radius:8px;
+    display:none;
+  }
+  .photo-preview.show{ display:block; }
+
+  .location-row{
+    display:flex;
+    gap:6px;
+  }
+  .location-row input{ flex:1; min-width:0; }
+  .locate-btn{
+    flex:0 0 auto;
+    padding:0 12px;
+    border-radius:8px;
+    border:1.5px solid var(--paper-line);
+    background:#fffdf8;
+    font-size:16px;
+    cursor:pointer;
+  }
 
   .row2{ display:flex; gap:10px; }
-  .row2 > div{ flex:1; }
+  .row2 > div{ flex:1; min-width:0; }
+
+  @media (max-width: 380px) {
+    .row2{ flex-direction:column; gap:12px; }
+  }
 
   .category-picker{ display:flex; gap:6px; }
   .cat-btn{
@@ -256,6 +289,19 @@
     font-weight:700;
     margin-right:4px;
   }
+  .entry-photo{
+    width:100%;
+    max-height:160px;
+    object-fit:cover;
+    border-radius:8px;
+    margin-bottom:8px;
+    display:block;
+  }
+  .entry-location{
+    font-size:11px;
+    color:var(--sub);
+    margin-bottom:6px;
+  }
   .del-btn{
     position:absolute;
     top:12px;
@@ -312,6 +358,20 @@
           <label>날짜</label>
           <input type="date" id="placeDate">
         </div>
+      </div>
+
+      <div class="field">
+        <label>위치</label>
+        <div class="location-row">
+          <input type="text" id="placeLocation" placeholder="예: 서울 강남구, 또는 직접 입력">
+          <button type="button" class="locate-btn" id="useLocationBtn" title="현재 위치 사용">📍</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>사진 (선택)</label>
+        <input type="file" id="placePhoto" accept="image/*">
+        <img class="photo-preview" id="placePhotoPreview">
       </div>
 
       <div class="field">
@@ -374,6 +434,12 @@
             <span data-v="1">★</span><span data-v="2">★</span><span data-v="3">★</span><span data-v="4">★</span><span data-v="5">★</span>
           </div>
         </div>
+      </div>
+
+      <div class="field">
+        <label>사진 (선택)</label>
+        <input type="file" id="drinkPhoto" accept="image/*">
+        <img class="photo-preview" id="drinkPhotoPreview">
       </div>
 
       <div class="field">
@@ -466,6 +532,27 @@
     return div.innerHTML;
   }
 
+  // ===== 공통: 사진 파일을 base64 이미지로 읽기 =====
+  function readFileAsDataURL(file) {
+    return new Promise((resolve, reject) => {
+      if (!file) { resolve(null); return; }
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+
+  // ===== 공통: 사진 선택하면 미리보기 보여주기 =====
+  function setupPhotoPreview(fileInput, previewImg) {
+    fileInput.addEventListener("change", async function () {
+      const file = fileInput.files[0];
+      if (!file) { previewImg.classList.remove("show"); return; }
+      previewImg.src = await readFileAsDataURL(file);
+      previewImg.classList.add("show");
+    });
+  }
+
   // =====================================================
   // 📍 장소 탭 로직
   // =====================================================
@@ -476,9 +563,32 @@
   const placeSaveBtn = document.getElementById("placeSaveBtn");
   const placeName = document.getElementById("placeName");
   const placeDate = document.getElementById("placeDate");
+  const placeLocation = document.getElementById("placeLocation");
+  const useLocationBtn = document.getElementById("useLocationBtn");
+  const placePhoto = document.getElementById("placePhoto");
+  const placePhotoPreview = document.getElementById("placePhotoPreview");
   const placeMemo = document.getElementById("placeMemo");
 
   placeDate.value = new Date().toISOString().slice(0, 10);
+  setupPhotoPreview(placePhoto, placePhotoPreview);
+
+  useLocationBtn.addEventListener("click", function () {
+    if (!navigator.geolocation) {
+      alert("이 기기에서는 위치 정보를 사용할 수 없어요.");
+      return;
+    }
+    useLocationBtn.textContent = "⏳";
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        placeLocation.value = pos.coords.latitude.toFixed(5) + ", " + pos.coords.longitude.toFixed(5);
+        useLocationBtn.textContent = "📍";
+      },
+      () => {
+        alert("위치 정보를 가져오지 못했어요. 직접 입력해주세요.");
+        useLocationBtn.textContent = "📍";
+      }
+    );
+  });
 
   setupCatPicker(placeCatPicker, "위스키바", (cat) => selectedPlaceCat = cat);
   setupStarPicker(placeStarPicker, () => placeRating, (v) => placeRating = v);
@@ -493,8 +603,8 @@
 
   async function loadPlaceEntries() {
     try {
-      const raw = localStorage.getItem(PLACE_KEY);
-      placeEntries = raw ? JSON.parse(raw) : [];
+      const result = await window.storage.get(PLACE_KEY, false);
+      placeEntries = result ? JSON.parse(result.value) : [];
     } catch (err) {
       placeEntries = [];
     }
@@ -502,7 +612,7 @@
   }
   async function persistPlaces() {
     try {
-      localStorage.setItem(PLACE_KEY, JSON.stringify(placeEntries));
+      await window.storage.set(PLACE_KEY, JSON.stringify(placeEntries), false);
     } catch (err) {
       console.error("장소 저장 오류:", err);
     }
@@ -512,18 +622,26 @@
     const name = placeName.value.trim();
     if (!name) { placeName.focus(); return; }
 
+    const photoFile = placePhoto.files[0];
+    const photoData = await readFileAsDataURL(photoFile);
+
     placeEntries.unshift({
       id: Date.now(),
       category: selectedPlaceCat,
       name: name,
       date: placeDate.value || new Date().toISOString().slice(0, 10),
+      location: placeLocation.value.trim(),
+      photo: photoData,
       rating: placeRating,
       memo: placeMemo.value.trim(),
     });
     await persistPlaces();
 
     placeName.value = "";
+    placeLocation.value = "";
     placeMemo.value = "";
+    placePhoto.value = "";
+    placePhotoPreview.classList.remove("show");
     placeRating = 0;
     renderStars(placeStarPicker, 0);
     renderPlaceList();
@@ -547,14 +665,18 @@
 
     placeListArea.innerHTML = filtered.map(e => {
       const stars = "★".repeat(e.rating) + "☆".repeat(5 - e.rating);
+      const photoHTML = e.photo ? `<img class="entry-photo" src="${e.photo}">` : "";
+      const locationHTML = e.location ? `<div class="entry-location">📍 ${escapeHTML(e.location)}</div>` : "";
       return `
         <div class="entry">
           <button class="del-btn" data-id="${e.id}">✕</button>
+          ${photoHTML}
           <span class="badge ${e.category}">${e.category}</span>
           <div class="entry-top">
             <p class="entry-name">${escapeHTML(e.name)}</p>
             <span class="entry-date">${e.date}</span>
           </div>
+          ${locationHTML}
           <div class="entry-rating">${stars}</div>
           <div class="entry-notes">${escapeHTML(e.memo)}</div>
         </div>
@@ -577,10 +699,13 @@
   const drinkName = document.getElementById("drinkName");
   const drinkBrand = document.getElementById("drinkBrand");
   const drinkDate = document.getElementById("drinkDate");
+  const drinkPhoto = document.getElementById("drinkPhoto");
+  const drinkPhotoPreview = document.getElementById("drinkPhotoPreview");
   const drinkAroma = document.getElementById("drinkAroma");
   const drinkTaste = document.getElementById("drinkTaste");
 
   drinkDate.value = new Date().toISOString().slice(0, 10);
+  setupPhotoPreview(drinkPhoto, drinkPhotoPreview);
 
   setupCatPicker(drinkCatPicker, "위스키", (cat) => selectedDrinkCat = cat);
   setupStarPicker(drinkStarPicker, () => drinkRating, (v) => drinkRating = v);
@@ -595,8 +720,8 @@
 
   async function loadDrinkEntries() {
     try {
-      const raw = localStorage.getItem(DRINK_KEY);
-      drinkEntries = raw ? JSON.parse(raw) : [];
+      const result = await window.storage.get(DRINK_KEY, false);
+      drinkEntries = result ? JSON.parse(result.value) : [];
     } catch (err) {
       drinkEntries = [];
     }
@@ -604,7 +729,7 @@
   }
   async function persistDrinks() {
     try {
-      localStorage.setItem(DRINK_KEY, JSON.stringify(drinkEntries));
+      await window.storage.set(DRINK_KEY, JSON.stringify(drinkEntries), false);
     } catch (err) {
       console.error("주류 저장 오류:", err);
     }
@@ -614,12 +739,16 @@
     const name = drinkName.value.trim();
     if (!name) { drinkName.focus(); return; }
 
+    const photoFile = drinkPhoto.files[0];
+    const photoData = await readFileAsDataURL(photoFile);
+
     drinkEntries.unshift({
       id: Date.now(),
       category: selectedDrinkCat,
       name: name,
       brand: drinkBrand.value.trim(),
       date: drinkDate.value || new Date().toISOString().slice(0, 10),
+      photo: photoData,
       rating: drinkRating,
       aroma: drinkAroma.value.trim(),
       taste: drinkTaste.value.trim(),
@@ -630,6 +759,8 @@
     drinkBrand.value = "";
     drinkAroma.value = "";
     drinkTaste.value = "";
+    drinkPhoto.value = "";
+    drinkPhotoPreview.classList.remove("show");
     drinkRating = 0;
     renderStars(drinkStarPicker, 0);
     renderDrinkList();
@@ -653,6 +784,7 @@
 
     drinkListArea.innerHTML = filtered.map(e => {
       const stars = "★".repeat(e.rating) + "☆".repeat(5 - e.rating);
+      const photoHTML = e.photo ? `<img class="entry-photo" src="${e.photo}">` : "";
       const notes = [
         e.aroma ? `<div><b>향</b>${escapeHTML(e.aroma)}</div>` : "",
         e.taste ? `<div><b>맛</b>${escapeHTML(e.taste)}</div>` : "",
@@ -660,6 +792,7 @@
       return `
         <div class="entry">
           <button class="del-btn" data-id="${e.id}">✕</button>
+          ${photoHTML}
           <span class="badge ${e.category}">${e.category}</span>
           <div class="entry-top">
             <div>
