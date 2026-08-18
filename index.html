@@ -313,6 +313,31 @@
     cursor:pointer;
     line-height:1;
   }
+  .edit-btn{
+    position:absolute;
+    top:12px;
+    right:38px;
+    border:none;
+    background:none;
+    color:#a99a86;
+    font-size:14px;
+    cursor:pointer;
+    line-height:1;
+  }
+  .cancel-edit-btn{
+    width:100%;
+    margin-top:6px;
+    padding:9px;
+    border:1px solid var(--paper-line);
+    border-radius:9px;
+    background:transparent;
+    color:var(--sub);
+    font-weight:700;
+    font-size:12px;
+    cursor:pointer;
+    display:none;
+  }
+  .cancel-edit-btn.show{ display:block; }
 
   .loading{
     text-align:center;
@@ -387,6 +412,7 @@
       </div>
 
       <button class="save-btn" id="placeSaveBtn">저장하기</button>
+      <button class="cancel-edit-btn" id="placeCancelBtn">수정 취소</button>
     </div>
 
     <div class="filters" id="placeFilters">
@@ -453,6 +479,7 @@
       </div>
 
       <button class="save-btn" id="drinkSaveBtn">저장하기</button>
+      <button class="cancel-edit-btn" id="drinkCancelBtn">수정 취소</button>
     </div>
 
     <div class="filters" id="drinkFilters">
@@ -474,6 +501,82 @@
 
   const PLACE_KEY = "tasting_places";
   const DRINK_KEY = "tasting_drinks";
+  const LEGACY_KEY = "tasting_entries";       // 예전 버전에서 쓰던 저장 키 (장소+주류가 한 항목에 섞여있던 시절)
+  const MIGRATED_FLAG_KEY = "tasting_migrated_v1";
+
+  // ===== 저장소 접근 도우미 =====
+  // (이 두 함수만 바꾸면 저장 방식을 통째로 교체할 수 있어요)
+  async function storageGetJSON(key) {
+    try {
+      const result = await window.storage.get(key, false);
+      return result ? JSON.parse(result.value) : null;
+    } catch (err) {
+      return null; // 저장된 값이 없거나 읽기 실패
+    }
+  }
+  async function storageSetJSON(key, value) {
+    try {
+      await window.storage.set(key, JSON.stringify(value), false);
+    } catch (err) {
+      console.error("저장 오류:", err);
+    }
+  }
+
+  // ===== 예전 데이터 이전(마이그레이션) =====
+  // 예전 버전들은 "tasting_entries"라는 하나의 저장 키에
+  // 장소/주류 정보가 한 항목 안에 같이 들어있었어요.
+  // 지금은 장소와 주류를 완전히 분리했기 때문에, 처음 실행될 때 한 번
+  // 예전 데이터를 찾아서 새 구조(장소 목록 / 주류 목록)로 옮겨줍니다.
+  async function migrateLegacyData() {
+    const alreadyMigrated = await storageGetJSON(MIGRATED_FLAG_KEY);
+    if (alreadyMigrated) return;
+
+    const legacy = (await storageGetJSON(LEGACY_KEY)) || [];
+
+    if (legacy.length > 0) {
+      const existingPlaces = (await storageGetJSON(PLACE_KEY)) || [];
+      const existingDrinks = (await storageGetJSON(DRINK_KEY)) || [];
+
+      const migratedDrinks = [];
+      const migratedPlaces = [];
+
+      legacy.forEach((e) => {
+        // 주류 정보는 예전 항목 대부분에 들어있으니 그대로 옮깁니다.
+        migratedDrinks.push({
+          id: e.id,
+          category: e.drink || e.category || "위스키",
+          name: e.name || "",
+          brand: e.brand || "",
+          date: e.date || "",
+          photo: null,
+          rating: e.rating || 0,
+          aroma: e.aroma || "",
+          taste: e.taste || "",
+        });
+
+        // "장소" 태그가 있던 항목은 장소 쪽으로도 하나 만들어둡니다.
+        // 예전엔 상호명을 따로 입력받지 않았어서, 이름은 비워두고
+        // 메모에 안내를 남겨서 나중에 직접 채워 넣을 수 있게 했어요.
+        if (e.place) {
+          migratedPlaces.push({
+            id: e.id + 1,
+            category: e.place,
+            name: e.name ? e.name + " 마셨던 곳" : "이전 기록",
+            date: e.date || "",
+            location: "",
+            photo: null,
+            rating: e.rating || 0,
+            memo: "예전 데이터에서 자동으로 옮겨온 기록이에요. 상호명을 확인하고 고쳐주세요.",
+          });
+        }
+      });
+
+      await storageSetJSON(DRINK_KEY, [...migratedDrinks, ...existingDrinks]);
+      await storageSetJSON(PLACE_KEY, [...migratedPlaces, ...existingPlaces]);
+    }
+
+    await storageSetJSON(MIGRATED_FLAG_KEY, true);
+  }
 
   let placeEntries = [];
   let drinkEntries = [];
@@ -561,6 +664,7 @@
   const placeFiltersEl = document.getElementById("placeFilters");
   const placeListArea = document.getElementById("placeListArea");
   const placeSaveBtn = document.getElementById("placeSaveBtn");
+  const placeCancelBtn = document.getElementById("placeCancelBtn");
   const placeName = document.getElementById("placeName");
   const placeDate = document.getElementById("placeDate");
   const placeLocation = document.getElementById("placeLocation");
@@ -568,6 +672,9 @@
   const placePhoto = document.getElementById("placePhoto");
   const placePhotoPreview = document.getElementById("placePhotoPreview");
   const placeMemo = document.getElementById("placeMemo");
+
+  let editingPlaceId = null;    // null이면 새로 추가하는 중, 값이 있으면 그 항목을 수정하는 중
+  let editingPlacePhoto = null; // 수정 중일 때, 새 사진을 안 고르면 기존 사진을 그대로 유지하기 위한 값
 
   placeDate.value = new Date().toISOString().slice(0, 10);
   setupPhotoPreview(placePhoto, placePhotoPreview);
@@ -578,14 +685,20 @@
       return;
     }
     useLocationBtn.textContent = "⏳";
+    useLocationBtn.disabled = true;
+    placeSaveBtn.disabled = true; // 위치를 받아오는 동안 실수로 먼저 저장하는 걸 막습니다
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         placeLocation.value = pos.coords.latitude.toFixed(5) + ", " + pos.coords.longitude.toFixed(5);
         useLocationBtn.textContent = "📍";
+        useLocationBtn.disabled = false;
+        placeSaveBtn.disabled = false;
       },
       () => {
         alert("위치 정보를 가져오지 못했어요. 직접 입력해주세요.");
         useLocationBtn.textContent = "📍";
+        useLocationBtn.disabled = false;
+        placeSaveBtn.disabled = false;
       }
     );
   });
@@ -602,20 +715,11 @@
   });
 
   async function loadPlaceEntries() {
-    try {
-      const result = await window.storage.get(PLACE_KEY, false);
-      placeEntries = result ? JSON.parse(result.value) : [];
-    } catch (err) {
-      placeEntries = [];
-    }
+    placeEntries = (await storageGetJSON(PLACE_KEY)) || [];
     renderPlaceList();
   }
   async function persistPlaces() {
-    try {
-      await window.storage.set(PLACE_KEY, JSON.stringify(placeEntries), false);
-    } catch (err) {
-      console.error("장소 저장 오류:", err);
-    }
+    await storageSetJSON(PLACE_KEY, placeEntries);
   }
 
   placeSaveBtn.addEventListener("click", async function () {
@@ -623,20 +727,47 @@
     if (!name) { placeName.focus(); return; }
 
     const photoFile = placePhoto.files[0];
-    const photoData = await readFileAsDataURL(photoFile);
+    // 사진을 새로 안 골랐으면(수정 중일 때) 기존 사진을 그대로 씁니다.
+    const photoData = photoFile ? await readFileAsDataURL(photoFile) : editingPlacePhoto;
 
-    placeEntries.unshift({
-      id: Date.now(),
-      category: selectedPlaceCat,
-      name: name,
-      date: placeDate.value || new Date().toISOString().slice(0, 10),
-      location: placeLocation.value.trim(),
-      photo: photoData,
-      rating: placeRating,
-      memo: placeMemo.value.trim(),
-    });
+    if (editingPlaceId === null) {
+      // ===== 새 항목 추가 =====
+      placeEntries.unshift({
+        id: Date.now(),
+        category: selectedPlaceCat,
+        name: name,
+        date: placeDate.value || new Date().toISOString().slice(0, 10),
+        location: placeLocation.value.trim(),
+        photo: photoData,
+        rating: placeRating,
+        memo: placeMemo.value.trim(),
+      });
+    } else {
+      // ===== 기존 항목 수정 =====
+      const target = placeEntries.find(e => e.id === editingPlaceId);
+      if (target) {
+        target.category = selectedPlaceCat;
+        target.name = name;
+        target.date = placeDate.value || target.date;
+        target.location = placeLocation.value.trim();
+        target.photo = photoData;
+        target.rating = placeRating;
+        target.memo = placeMemo.value.trim();
+      }
+      exitPlaceEditMode();
+    }
+
     await persistPlaces();
+    resetPlaceForm();
+    renderPlaceList();
+  });
 
+  placeCancelBtn.addEventListener("click", function () {
+    exitPlaceEditMode();
+    resetPlaceForm();
+  });
+
+  function resetPlaceForm() {
     placeName.value = "";
     placeLocation.value = "";
     placeMemo.value = "";
@@ -644,12 +775,44 @@
     placePhotoPreview.classList.remove("show");
     placeRating = 0;
     renderStars(placeStarPicker, 0);
-    renderPlaceList();
-  });
+  }
+
+  function enterPlaceEditMode(entry) {
+    editingPlaceId = entry.id;
+    editingPlacePhoto = entry.photo || null;
+
+    selectedPlaceCat = entry.category;
+    [...placeCatPicker.children].forEach(b => b.classList.toggle("active", b.dataset.cat === entry.category));
+    placeName.value = entry.name || "";
+    placeDate.value = entry.date || "";
+    placeLocation.value = entry.location || "";
+    placeMemo.value = entry.memo || "";
+    placeRating = entry.rating || 0;
+    renderStars(placeStarPicker, placeRating);
+
+    if (entry.photo) {
+      placePhotoPreview.src = entry.photo;
+      placePhotoPreview.classList.add("show");
+    } else {
+      placePhotoPreview.classList.remove("show");
+    }
+
+    placeSaveBtn.textContent = "수정 완료";
+    placeCancelBtn.classList.add("show");
+    document.querySelector('#placeSection .form-card').scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function exitPlaceEditMode() {
+    editingPlaceId = null;
+    editingPlacePhoto = null;
+    placeSaveBtn.textContent = "저장하기";
+    placeCancelBtn.classList.remove("show");
+  }
 
   async function deletePlaceEntry(id) {
     placeEntries = placeEntries.filter(e => e.id !== id);
     await persistPlaces();
+    if (editingPlaceId === id) { exitPlaceEditMode(); resetPlaceForm(); }
     renderPlaceList();
   }
 
@@ -669,6 +832,7 @@
       const locationHTML = e.location ? `<div class="entry-location">📍 ${escapeHTML(e.location)}</div>` : "";
       return `
         <div class="entry">
+          <button class="edit-btn" data-id="${e.id}">✏️</button>
           <button class="del-btn" data-id="${e.id}">✕</button>
           ${photoHTML}
           <span class="badge ${e.category}">${e.category}</span>
@@ -683,6 +847,13 @@
       `;
     }).join("");
 
+    placeListArea.querySelectorAll(".edit-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const entry = placeEntries.find(e => e.id === Number(btn.dataset.id));
+        if (entry) enterPlaceEditMode(entry);
+      });
+    });
+
     placeListArea.querySelectorAll(".del-btn").forEach(btn => {
       btn.addEventListener("click", () => deletePlaceEntry(Number(btn.dataset.id)));
     });
@@ -696,6 +867,7 @@
   const drinkFiltersEl = document.getElementById("drinkFilters");
   const drinkListArea = document.getElementById("drinkListArea");
   const drinkSaveBtn = document.getElementById("drinkSaveBtn");
+  const drinkCancelBtn = document.getElementById("drinkCancelBtn");
   const drinkName = document.getElementById("drinkName");
   const drinkBrand = document.getElementById("drinkBrand");
   const drinkDate = document.getElementById("drinkDate");
@@ -703,6 +875,9 @@
   const drinkPhotoPreview = document.getElementById("drinkPhotoPreview");
   const drinkAroma = document.getElementById("drinkAroma");
   const drinkTaste = document.getElementById("drinkTaste");
+
+  let editingDrinkId = null;
+  let editingDrinkPhoto = null;
 
   drinkDate.value = new Date().toISOString().slice(0, 10);
   setupPhotoPreview(drinkPhoto, drinkPhotoPreview);
@@ -719,20 +894,11 @@
   });
 
   async function loadDrinkEntries() {
-    try {
-      const result = await window.storage.get(DRINK_KEY, false);
-      drinkEntries = result ? JSON.parse(result.value) : [];
-    } catch (err) {
-      drinkEntries = [];
-    }
+    drinkEntries = (await storageGetJSON(DRINK_KEY)) || [];
     renderDrinkList();
   }
   async function persistDrinks() {
-    try {
-      await window.storage.set(DRINK_KEY, JSON.stringify(drinkEntries), false);
-    } catch (err) {
-      console.error("주류 저장 오류:", err);
-    }
+    await storageSetJSON(DRINK_KEY, drinkEntries);
   }
 
   drinkSaveBtn.addEventListener("click", async function () {
@@ -740,21 +906,48 @@
     if (!name) { drinkName.focus(); return; }
 
     const photoFile = drinkPhoto.files[0];
-    const photoData = await readFileAsDataURL(photoFile);
+    const photoData = photoFile ? await readFileAsDataURL(photoFile) : editingDrinkPhoto;
 
-    drinkEntries.unshift({
-      id: Date.now(),
-      category: selectedDrinkCat,
-      name: name,
-      brand: drinkBrand.value.trim(),
-      date: drinkDate.value || new Date().toISOString().slice(0, 10),
-      photo: photoData,
-      rating: drinkRating,
-      aroma: drinkAroma.value.trim(),
-      taste: drinkTaste.value.trim(),
-    });
+    if (editingDrinkId === null) {
+      // ===== 새 항목 추가 =====
+      drinkEntries.unshift({
+        id: Date.now(),
+        category: selectedDrinkCat,
+        name: name,
+        brand: drinkBrand.value.trim(),
+        date: drinkDate.value || new Date().toISOString().slice(0, 10),
+        photo: photoData,
+        rating: drinkRating,
+        aroma: drinkAroma.value.trim(),
+        taste: drinkTaste.value.trim(),
+      });
+    } else {
+      // ===== 기존 항목 수정 =====
+      const target = drinkEntries.find(e => e.id === editingDrinkId);
+      if (target) {
+        target.category = selectedDrinkCat;
+        target.name = name;
+        target.brand = drinkBrand.value.trim();
+        target.date = drinkDate.value || target.date;
+        target.photo = photoData;
+        target.rating = drinkRating;
+        target.aroma = drinkAroma.value.trim();
+        target.taste = drinkTaste.value.trim();
+      }
+      exitDrinkEditMode();
+    }
+
     await persistDrinks();
+    resetDrinkForm();
+    renderDrinkList();
+  });
 
+  drinkCancelBtn.addEventListener("click", function () {
+    exitDrinkEditMode();
+    resetDrinkForm();
+  });
+
+  function resetDrinkForm() {
     drinkName.value = "";
     drinkBrand.value = "";
     drinkAroma.value = "";
@@ -763,12 +956,45 @@
     drinkPhotoPreview.classList.remove("show");
     drinkRating = 0;
     renderStars(drinkStarPicker, 0);
-    renderDrinkList();
-  });
+  }
+
+  function enterDrinkEditMode(entry) {
+    editingDrinkId = entry.id;
+    editingDrinkPhoto = entry.photo || null;
+
+    selectedDrinkCat = entry.category;
+    [...drinkCatPicker.children].forEach(b => b.classList.toggle("active", b.dataset.cat === entry.category));
+    drinkName.value = entry.name || "";
+    drinkBrand.value = entry.brand || "";
+    drinkDate.value = entry.date || "";
+    drinkAroma.value = entry.aroma || "";
+    drinkTaste.value = entry.taste || "";
+    drinkRating = entry.rating || 0;
+    renderStars(drinkStarPicker, drinkRating);
+
+    if (entry.photo) {
+      drinkPhotoPreview.src = entry.photo;
+      drinkPhotoPreview.classList.add("show");
+    } else {
+      drinkPhotoPreview.classList.remove("show");
+    }
+
+    drinkSaveBtn.textContent = "수정 완료";
+    drinkCancelBtn.classList.add("show");
+    document.querySelector('#drinkSection .form-card').scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function exitDrinkEditMode() {
+    editingDrinkId = null;
+    editingDrinkPhoto = null;
+    drinkSaveBtn.textContent = "저장하기";
+    drinkCancelBtn.classList.remove("show");
+  }
 
   async function deleteDrinkEntry(id) {
     drinkEntries = drinkEntries.filter(e => e.id !== id);
     await persistDrinks();
+    if (editingDrinkId === id) { exitDrinkEditMode(); resetDrinkForm(); }
     renderDrinkList();
   }
 
@@ -791,6 +1017,7 @@
       ].join("");
       return `
         <div class="entry">
+          <button class="edit-btn" data-id="${e.id}">✏️</button>
           <button class="del-btn" data-id="${e.id}">✕</button>
           ${photoHTML}
           <span class="badge ${e.category}">${e.category}</span>
@@ -807,14 +1034,24 @@
       `;
     }).join("");
 
+    drinkListArea.querySelectorAll(".edit-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const entry = drinkEntries.find(e => e.id === Number(btn.dataset.id));
+        if (entry) enterDrinkEditMode(entry);
+      });
+    });
+
     drinkListArea.querySelectorAll(".del-btn").forEach(btn => {
       btn.addEventListener("click", () => deleteDrinkEntry(Number(btn.dataset.id)));
     });
   }
 
   // ===== 시작 =====
-  loadPlaceEntries();
-  loadDrinkEntries();
+  (async function init() {
+    await migrateLegacyData();
+    await loadPlaceEntries();
+    await loadDrinkEntries();
+  })();
 </script>
 
 </body>
